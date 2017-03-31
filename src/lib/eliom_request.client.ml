@@ -65,14 +65,14 @@ let get_cookie_info_for_uri uri =
   get_cookie_info_for_uri_js uri_js
 
 
-type 'a result = XmlHttpRequest.http_frame -> 'a
+type 'a result = Lwt_xmlHttpRequest.http_frame -> 'a
 
 let xml_result x =
-  match x.XmlHttpRequest.content_xml () with
+  match x.Lwt_xmlHttpRequest.content_xml () with
     | None -> raise Non_xml_content
     | Some v -> v
 
-let string_result x = x.XmlHttpRequest.content
+let string_result x = x.Lwt_xmlHttpRequest.content
 
 (*TODO: use Url.Current.set *)
 let redirect_get url = Dom_html.window##.location##.href := Js.string url
@@ -117,7 +117,7 @@ let nl_template_string = "__nl_n_eliom-template.name"
 
 
 
-(** Same as XmlHttpRequest.perform_raw_url, but:
+(** Same as Lwt_xmlHttpRequest.perform_raw_url, but:
     - sends tab cookies in an HTTP header
     - does half and full XHR redirections according to headers
 
@@ -224,7 +224,7 @@ let send
       else true
     in
     try%lwt
-      let%lwt r = XmlHttpRequest.perform_raw_url
+      let%lwt r = Lwt_xmlHttpRequest.perform_raw_url
           ?with_credentials
           ?headers:(Some headers) ?content_type:None
           ?post_args ~get_args ?form_arg:form_contents ~check_headers
@@ -233,7 +233,7 @@ let send
       (if Js.Unsafe.global##.___eliom_use_cookie_substitutes_ <> Js.undefined
        then
          match (* Cookie substitutes are for iOS WKWebView *)
-           r.XmlHttpRequest.headers
+           r.Lwt_xmlHttpRequest.headers
              Eliom_common.set_cookie_substitutes_header_name
          with
          | None | Some "" -> ()
@@ -241,19 +241,19 @@ let send
            Eliommod_cookies.update_cookie_table ~in_local_storage:true
              host
              (Eliommod_cookies.cookieset_of_json cookie_substitutes));
-      (match r.XmlHttpRequest.headers Eliom_common.set_tab_cookies_header_name
+      (match r.Lwt_xmlHttpRequest.headers Eliom_common.set_tab_cookies_header_name
        with
          | None | Some "" -> () (* Empty tab_cookies for IE compat *)
          | Some tab_cookies ->
            let tab_cookies = Eliommod_cookies.cookieset_of_json tab_cookies in
            Eliommod_cookies.update_cookie_table host tab_cookies; );
-      if r.XmlHttpRequest.code = 204
+      if r.Lwt_xmlHttpRequest.code = 204
       then
-        match r.XmlHttpRequest.headers Eliom_common.full_xhr_redir_header with
+        match r.Lwt_xmlHttpRequest.headers Eliom_common.full_xhr_redir_header with
           | None | Some "" ->
-            (match r.XmlHttpRequest.headers Eliom_common.half_xhr_redir_header
+            (match r.Lwt_xmlHttpRequest.headers Eliom_common.half_xhr_redir_header
              with
-               | None | Some "" -> Lwt.return (r.XmlHttpRequest.url, None)
+               | None | Some "" -> Lwt.return (r.Lwt_xmlHttpRequest.url, None)
                | Some uri ->
                  (match post_args, form_arg with
                    | None, None -> redirect_get uri
@@ -268,22 +268,22 @@ let send
         then
           let url =
             match
-              r.XmlHttpRequest.headers Eliom_common.response_url_header
+              r.Lwt_xmlHttpRequest.headers Eliom_common.response_url_header
             with
             | None | Some "" -> Url.add_get_args url (List.tl get_args)
             | Some url       -> Url.resolve url
           in
           Lwt.return (url, Some (result r))
         else
-          if r.XmlHttpRequest.code = 200
-             || XmlHttpRequest.(r.code = 0 && r.content <> "")
+          if r.Lwt_xmlHttpRequest.code = 200
+             || Lwt_xmlHttpRequest.(r.code = 0 && r.content <> "")
                 (* HACK for file access within Cordova which yields code 0 *)
                 (* Code 0 might mean a network error, but then we have no
                    content. *)
-          then Lwt.return (r.XmlHttpRequest.url, Some (result r))
-          else Lwt.fail (Failed_request r.XmlHttpRequest.code)
+          then Lwt.return (r.Lwt_xmlHttpRequest.url, Some (result r))
+          else Lwt.fail (Failed_request r.Lwt_xmlHttpRequest.code)
     with
-      | XmlHttpRequest.Wrong_headers (code, headers) ->
+      | Lwt_xmlHttpRequest.Wrong_headers (code, headers) ->
         (* We are requesting application content and the headers tels
            us that the answer is not application content *)
         match headers Eliom_common.appl_name_header_name with
